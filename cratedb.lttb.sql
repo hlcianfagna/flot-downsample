@@ -27,23 +27,11 @@ Usage:
 
 with downsampleddata as (
 			SELECT lttb_with_array_of_arrays(array_agg([ts,reading]), 8) AS lttb
-			FROM metrics ),
-	series2 as ( /* this CTE builds on https://stackoverflow.com/questions/8137112/unnest-array-by-one-level/9724943#9724943 */ 
-		SELECT generate_series(array_lower(series1.lttb,2),array_upper(series1.lttb,2)) as x, series1.i
-		FROM (SELECT generate_series(array_lower(downsampleddata.lttb,1),array_upper(downsampleddata.lttb,1)) as i,lttb
-			FROM downsampleddata) series1 
-    )
-	,unnested as (
-		SELECT series2.i,array_agg(lttb[series2.i][series2.x]) as downsampled
-		FROM     series2, downsampleddata
-		GROUP BY series2.i
-		)
-  ,inarray AS (SELECT downsampled[1] as lttb
-              FROM unnested)
-SELECT	(inarray.lttb[1]/1000)::TIMESTAMP AS ts,
-		inarray.lttb [2] AS reading
-FROM inarray
-ORDER BY 1;
+			FROM metrics )
+select   ((downsampleddata.lttb[generate_series]::ARRAY(DOUBLE))[1]/1000)::TIMESTAMP as ts,
+        (downsampleddata.lttb[generate_series]::ARRAY(DOUBLE))[2] as reading
+from  generate_series(1,8),downsampleddata
+order by 1;
 
 */
 
