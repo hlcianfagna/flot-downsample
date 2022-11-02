@@ -28,7 +28,7 @@ Usage:
 with downsampleddata as (
 			SELECT lttb_with_array_of_arrays(array_agg([ts,reading]), 8) AS lttb
 			FROM metrics ),
-	series2 as (
+	series2 as ( /* this CTE builds on https://stackoverflow.com/questions/8137112/unnest-array-by-one-level/9724943#9724943 */ 
 		SELECT generate_series(array_lower(series1.lttb,2),array_upper(series1.lttb,2)) as x, series1.i
 		FROM (SELECT generate_series(array_lower(downsampleddata.lttb,1),array_upper(downsampleddata.lttb,1)) as i,lttb
 			FROM downsampleddata) series1 
