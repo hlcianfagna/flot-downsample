@@ -26,7 +26,11 @@ THE SOFTWARE.
 Usage:
 
 with downsampleddata as (
-			SELECT lttb_with_array_of_arrays(array_agg([ts,reading]), 8) AS lttb
+			SELECT 	lttb_with_array_of_arrays(
+						sort_nested_array(
+							array_agg([ts,reading])
+							,0)
+						, 8) AS lttb
 			FROM metrics )
 select   ((downsampleddata.lttb[generate_series]::ARRAY(DOUBLE))[1]/1000)::TIMESTAMP as ts,
         (downsampleddata.lttb[generate_series]::ARRAY(DOUBLE))[2] as reading
@@ -35,16 +39,27 @@ order by 1;
 
 */
 
+CREATE OR REPLACE FUNCTION sort_nested_array ("data" ARRAY(ARRAY(DOUBLE)), sort_dimension_zero_based SMALLINT)
+RETURNS ARRAY(ARRAY(DOUBLE))
+LANGUAGE JAVASCRIPT
+AS
+'   function sort_nested_array(data,sort_dimension_zero_based) {		
+		
+		data = data.sort(	function compareFn(a, b) { 
+						if (a[sort_dimension_zero_based]<b[sort_dimension_zero_based]) {    return -1;  }
+						if (a[sort_dimension_zero_based]>b[sort_dimension_zero_based]) {    return 1;	}
+						return 0; 
+					}
+				)
+		return data;
+	}
+';
+
 CREATE OR REPLACE FUNCTION lttb_with_array_of_arrays ("data" ARRAY(ARRAY(DOUBLE)), threshold int)
 RETURNS ARRAY(ARRAY(DOUBLE))
 LANGUAGE JAVASCRIPT
 AS
-'   function lttb_with_array_of_arrays(data,threshold) {		
-		
-		data = data.sort(	function compareFn(a, b) { 
-								if (a[0]<b[0]) {    return -1;  }
-								if (a[0]>b[0]) {    return 1;	}
-								return 0; })
+'   function lttb_with_array_of_arrays(data,threshold) {				
 		
         var data_length = data.length;
         if (threshold >= data_length || threshold === 0) {
