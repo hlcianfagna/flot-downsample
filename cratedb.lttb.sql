@@ -23,43 +23,32 @@ THE SOFTWARE.
 */
 
 /*
-Usage:
+Usage (NB results only correct on CrateDB >= 5.2):
 
-WITH 
-	downsampleddata AS (
-		SELECT lttb_with_text_array(
-				array(
-					SELECT CONCAT (ts,'***',reading) 
-					FROM metrics
-				)
-				, 8) AS lttb
-	),
-	unnested AS (
-		SELECT unnest(downsampleddata.lttb) AS lttb
-		FROM downsampleddata
-	),
-	inarray AS (
-		SELECT string_to_array(unnested.lttb, '***') AS lttb
-		FROM unnested
-	)
-SELECT	inarray.lttb [1]::TIMESTAMP AS ts,
-		inarray.lttb [2] AS reading
-FROM inarray
-ORDER BY 1;
-*/
+with downsampleddata as 
+ (	select lttb_with_parallalel_arrays(	
+		array(select ts from metrics order by ts),							
+		array(select reading from metrics order by ts)
+		,8) as lttb)
+select unnest(lttb['0'])::TIMESTAMP as ts,unnest(lttb['1']) as reading
+FROM downsampleddata;
 
-CREATE OR REPLACE FUNCTION lttb_with_text_array ("data" ARRAY(TEXT), threshold int)
-RETURNS ARRAY(TEXT)
+*/	
+
+
+CREATE OR REPLACE FUNCTION lttb_with_parallalel_arrays (xarray ARRAY(TIMESTAMP WITH TIME ZONE),yarray ARRAY(FLOAT), threshold int)
+RETURNS OBJECT(DYNAMIC)
 LANGUAGE JAVASCRIPT
 AS
-'   function lttb_with_text_array(data,threshold) {		
-		
-        var data_length = data.length;
+'    
+    function lttb_with_parallalel_arrays(xarray,yarray,threshold) {		
+        var data_length = xarray.length;
         if (threshold >= data_length || threshold === 0) {
-            return data; // Nothing to do
+            return Object.assign({}, [xarray,yarray]); // Nothing to do
         }
 
-        var sampled = [],
+        var sampledx = [],
+			sampledy = [],
             sampled_index = 0;
 
         // Bucket size. Leave room for start and end data points
@@ -71,7 +60,8 @@ AS
             area,
             next_a;
 
-        sampled[ sampled_index++ ] = data[ a ]; // Always add the first point
+        sampledx[ sampled_index ] = xarray[a];
+		sampledy[ sampled_index++ ] = yarray[a]; // Always add the first point
 
         for (var i = 0; i < threshold - 2; i++) {
 
@@ -85,9 +75,8 @@ AS
             var avg_range_length = avg_range_end - avg_range_start;
 
             for ( ; avg_range_start<avg_range_end; avg_range_start++ ) {
-              var datasplit_avg_range_start = data[avg_range_start].split("***");
-			  avg_x += datasplit_avg_range_start[0] * 1; // * 1 enforces Number (value may be Date)
-              avg_y += datasplit_avg_range_start[1] * 1;
+              avg_x += xarray[ avg_range_start ] * 1; // * 1 enforces Number (value may be Date)
+              avg_y += yarray[ avg_range_start ] * 1;
             }
             avg_x /= avg_range_length;
             avg_y /= avg_range_length;
@@ -97,31 +86,32 @@ AS
                 range_to   = Math.floor( (i + 1) * every ) + 1;
 
             // Point a
-            var datasplit_a = data[a].split("***");
-			var point_a_x = datasplit_a[0] * 1, // enforce Number (value may be Date)
-                point_a_y = datasplit_a[1] * 1;
+            var point_a_x = xarray[ a ] * 1, // enforce Number (value may be Date)
+                point_a_y = yarray[ a ] * 1;
 
             max_area = area = -1;
 
             for ( ; range_offs < range_to; range_offs++ ) {
                 // Calculate triangle area over three buckets
-                var datasplit_range_offs = data[range_offs].split("***");
-				area = Math.abs( ( point_a_x - avg_x ) * ( datasplit_range_offs[1] - point_a_y ) -
-                            ( point_a_x - datasplit_range_offs[0] ) * ( avg_y - point_a_y )
+                area = Math.abs( ( point_a_x - avg_x ) * ( yarray[ range_offs ] - point_a_y ) -
+                            ( point_a_x - xarray[ range_offs ] ) * ( avg_y - point_a_y )
                           ) * 0.5;
                 if ( area > max_area ) {
                     max_area = area;
-                    max_area_point = [datasplit_range_offs[0],datasplit_range_offs[1]];
+                    max_area_point = [xarray[range_offs],yarray[range_offs]];
                     next_a = range_offs; // Next a is this b
                 }
             }
 
-            sampled[ sampled_index++ ] = max_area_point[0]+"***"+max_area_point[1]; // Pick this point from the bucket
+            sampledx[ sampled_index ] = max_area_point[0];
+			sampledy[ sampled_index++ ] = max_area_point[1]; // Pick this point from the bucket
             a = next_a; // This a is the next a (chosen b)
         }
 
-        sampled[ sampled_index++ ] = data[ data_length - 1 ]; // Always add last
-
-        return sampled;
+        sampledx[ sampled_index ] = xarray[data_length - 1];
+		sampledy[ sampled_index++ ] = yarray[data_length - 1]; // Always add last				
+		
+        return Object.assign({}, [sampledx,sampledy]);
     }
+
 ';
