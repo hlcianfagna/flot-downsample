@@ -26,7 +26,7 @@ THE SOFTWARE.
 Usage (NB results only correct on CrateDB >= 5.1.1):
 
 with downsampleddata as 
- (	select lttb_with_parallalel_arrays(	
+ (	select lttb_with_parallel_arrays(	
 		array(select ts from metrics order by ts),							
 		array(select reading from metrics order by ts)
 		,8) as lttb)
@@ -36,12 +36,12 @@ FROM downsampleddata;
 */	
 
 
-CREATE OR REPLACE FUNCTION lttb_with_parallalel_arrays (xarray ARRAY(TIMESTAMP WITH TIME ZONE),yarray ARRAY(FLOAT), threshold int)
+CREATE OR REPLACE FUNCTION lttb_with_parallel_arrays (xarray ARRAY(TIMESTAMP WITH TIME ZONE),yarray ARRAY(FLOAT), threshold int)
 RETURNS OBJECT(DYNAMIC)
 LANGUAGE JAVASCRIPT
 AS
 '    
-    function lttb_with_parallalel_arrays(xarray,yarray,threshold) {		
+    function lttb_with_parallel_arrays(xarray,yarray,threshold) {		
         var data_length = xarray.length;
         if (threshold >= data_length || threshold === 0) {
             return Object.assign({}, [xarray,yarray]); // Nothing to do
