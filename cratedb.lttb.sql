@@ -23,7 +23,7 @@ THE SOFTWARE.
 */
 
 /*
-Usage (NB results only correct on CrateDB >= 5.2):
+Usage (NB results only correct on CrateDB >= 5.1.1):
 
 with downsampleddata as 
  (	select lttb_with_parallalel_arrays(	
